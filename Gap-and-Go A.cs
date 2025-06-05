@@ -4,6 +4,7 @@ using System.Linq;
 using cAlgo.API;
 using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
+using cAlgo.Indicators;
 
 namespace cAlgo.Robots
 {
@@ -56,7 +57,7 @@ namespace cAlgo.Robots
         [Parameter("Min Profit Factor (Q1)", DefaultValue = 0.8, Group = "Performance Protection")]
         public double MinProfitFactor { get; set; }
         
-        [Parameter("Min Average Trade (Q1)", DefaultValue = -1.0, Group = "Performance Protection")]
+        [Parameter("Min Average Trade (Q1)", DefaultValue = 0, Group = "Performance Protection")]
         public double MinAverageTrade { get; set; }
         
         #endregion
@@ -66,8 +67,7 @@ namespace cAlgo.Robots
         private const int TimeframeMinutes = 5;
         private const string StrategyLabel = "RTH Gap-and-Go";
         
-        private List<double> _rthEmaValues = new();
-        private double _emaAlpha;
+        private EMA_RTH _rthEma;
         private TimeZoneInfo _nyZone;
         private TimeSpan _rthStart, _rthEnd, _entryLimit;
         private TimeSpan _emaSessionStart, _emaSessionEnd;
@@ -185,6 +185,7 @@ namespace cAlgo.Robots
             public double TakeProfit { get; }
             public double Size { get; }
             public bool IsGapUp { get; }
+            public DateTime TimeCreated { get; }
             
             public PatternOrder(PatternSignature signature, Bar bar3, string orderId, 
                               double entryPrice, double stopLoss, double takeProfit, 
@@ -198,6 +199,7 @@ namespace cAlgo.Robots
                 TakeProfit = takeProfit;
                 Size = size;
                 IsGapUp = isGapUp;
+                TimeCreated = DateTime.UtcNow;
             }
         }
         
@@ -227,8 +229,8 @@ namespace cAlgo.Robots
             Print($"Daily init done: {_dailyInitDone}");
             
             ParseSessionTimes();
-            InitializeTimeZone();
             InitializeIndicators();
+            InitializeTimeZone();
             InitializePerformanceTracking();
             
             Positions.Opened += OnPositionOpened;
@@ -269,10 +271,11 @@ namespace cAlgo.Robots
         
         private void InitializeIndicators()
         {
-            Print($"Initializing EMA calculations...");
-            _emaAlpha = 2.0 / (Period + 1);
-            UpdateRthEmaValues();
-            Print($"EMA RTH values initialized with period {Period}");
+            Print($"Initializing EMA indicator...");
+            string emaStart = _emaSessionStart.ToString(@"hh\:mm");
+            string emaEnd = _emaSessionEnd.ToString(@"hh\:mm");
+            _rthEma = Indicators.GetIndicator<EMA_RTH>(Period, Source, 0, emaStart, emaEnd);
+            Print($"EMA RTH indicator initialized with period {Period}");
         }
         
         private void InitializeTimeZone()
@@ -508,8 +511,6 @@ namespace cAlgo.Robots
             {
                 return;
             }
-
-            UpdateRthEmaValues();
             
             int completedBarIndex = Bars.Count - 2;
             if (completedBarIndex < 0) return;
@@ -579,12 +580,7 @@ namespace cAlgo.Robots
         
         private void IdentifyGap(int barIndex)
         {
-            if (barIndex >= _rthEmaValues.Count)
-                UpdateRthEmaValues();
-
-            double emaValue = double.NaN;
-            if (barIndex < _rthEmaValues.Count)
-                emaValue = _rthEmaValues[barIndex];
+            double emaValue = _rthEma.RthEmaSeries[barIndex];
             
             Print($"Identifying gap - EMA value: {emaValue}, Bar High: {Bars.HighPrices[barIndex]}, Bar Low: {Bars.LowPrices[barIndex]}");
             
@@ -613,43 +609,6 @@ namespace cAlgo.Robots
             {
                 Print($"EMA value is NaN - cannot identify gap yet");
             }
-        }
-
-        private void UpdateRthEmaValues()
-        {
-            int startIndex = _rthEmaValues.Count;
-            double previousEma = startIndex > 0 ? _rthEmaValues[startIndex - 1] : double.NaN;
-
-            for (int i = startIndex; i < Bars.Count; i++)
-            {
-                var etTime = TimeZoneInfo.ConvertTimeFromUtc(Bars.OpenTimes[i], _nyZone);
-                bool inSession = etTime.TimeOfDay >= _emaSessionStart && etTime.TimeOfDay <= _emaSessionEnd;
-                double price = GetPriceFromSource(i);
-
-                if (inSession)
-                {
-                    if (double.IsNaN(previousEma))
-                        previousEma = price;
-                    else
-                        previousEma = previousEma + _emaAlpha * (price - previousEma);
-                }
-
-                _rthEmaValues.Add(previousEma);
-            }
-        }
-
-        private double GetPriceFromSource(int index)
-        {
-            return Source switch
-            {
-                PriceType.Open => Bars.OpenPrices[index],
-                PriceType.High => Bars.HighPrices[index],
-                PriceType.Low => Bars.LowPrices[index],
-                PriceType.Median => (Bars.HighPrices[index] + Bars.LowPrices[index]) / 2.0,
-                PriceType.Typical => (Bars.HighPrices[index] + Bars.LowPrices[index] + Bars.ClosePrices[index]) / 3.0,
-                PriceType.Weighted => (Bars.HighPrices[index] + Bars.LowPrices[index] + 2 * Bars.ClosePrices[index]) / 4.0,
-                _ => Bars.ClosePrices[index]
-            };
         }
         
         private void ProcessPotentialPatterns()
