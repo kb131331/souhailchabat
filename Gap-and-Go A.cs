@@ -897,11 +897,7 @@ namespace cAlgo.Robots
                     Print($"Processing 4th bar rules for order {patternOrder.OrderId}");
                     ProcessFourthBarRules(patternOrder, pendingOrder, currentBar, ordersToRemove);
                 }
-                else if ((Server.Time - patternOrder.TimeCreated).TotalHours > 12)
-                {
-                    Print($"Order {patternOrder.OrderId} expired (>12 hours) - removing");
-                    ordersToRemove.Add(patternOrder);
-                }
+                // Removed expiration check to allow orders to remain pending beyond 12 hours
             }
             
             ordersToRemove.ForEach(order => _pendingPatternOrders.Remove(order));
