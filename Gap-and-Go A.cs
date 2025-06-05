@@ -185,7 +185,6 @@ namespace cAlgo.Robots
             public double TakeProfit { get; }
             public double Size { get; }
             public bool IsGapUp { get; }
-            public DateTime TimeCreated { get; }
             
             public PatternOrder(PatternSignature signature, Bar bar3, string orderId, 
                               double entryPrice, double stopLoss, double takeProfit, 
@@ -199,7 +198,6 @@ namespace cAlgo.Robots
                 TakeProfit = takeProfit;
                 Size = size;
                 IsGapUp = isGapUp;
-                TimeCreated = DateTime.UtcNow;
             }
         }
         
@@ -897,7 +895,6 @@ namespace cAlgo.Robots
                     Print($"Processing 4th bar rules for order {patternOrder.OrderId}");
                     ProcessFourthBarRules(patternOrder, pendingOrder, currentBar, ordersToRemove);
                 }
-                // Removed expiration check to allow orders to remain pending beyond 12 hours
             }
             
             ordersToRemove.ForEach(order => _pendingPatternOrders.Remove(order));
