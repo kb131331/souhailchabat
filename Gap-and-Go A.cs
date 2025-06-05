@@ -22,6 +22,7 @@ namespace cAlgo.Robots
     /// - Daily trade limits and P/L-based trade conditions
     /// - Performance protection: Stops trading if profit factor < 0.8 in Q1 (Jan-Mar)
     /// - Conservative mode: Checks price movement vs original entry instead of P/L
+    /// - Integrated EMA calculation (no external indicator dependency)
     /// </summary>
     
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
@@ -66,10 +67,12 @@ namespace cAlgo.Robots
         private const int TimeframeMinutes = 5;
         private const string StrategyLabel = "RTH Gap-and-Go";
         
-        private readonly List<double> _emaSeries = new();
+        // EMA calculation fields (replacing the external indicator)
         private double _emaMultiplier;
-        private double _lastEma;
-        private bool _emaSeeded;
+        private double _lastEmaValue = double.NaN;
+        private bool _emaSeeded = false;
+        private Dictionary<int, double> _emaCache = new Dictionary<int, double>();
+        
         private TimeZoneInfo _nyZone;
         private TimeSpan _rthStart, _rthEnd, _entryLimit;
         private TimeSpan _emaSessionStart, _emaSessionEnd;
@@ -231,8 +234,8 @@ namespace cAlgo.Robots
             Print($"Daily init done: {_dailyInitDone}");
             
             ParseSessionTimes();
+            InitializeEmaCalculation();
             InitializeTimeZone();
-            InitializeEma();
             InitializePerformanceTracking();
             
             Positions.Opened += OnPositionOpened;
@@ -271,18 +274,12 @@ namespace cAlgo.Robots
             }
         }
         
-        private void InitializeEma()
+        private void InitializeEmaCalculation()
         {
-            Print($"Initializing EMA calculations...");
+            Print($"Initializing EMA calculation...");
+            // EMA multiplier formula: 2 / (Period + 1)
             _emaMultiplier = 2.0 / (Period + 1);
-            _emaSeeded = false;
-            _lastEma = 0.0;
-            _emaSeries.Clear();
-
-            for (int i = 0; i < Bars.Count; i++)
-                UpdateEmaForIndex(i);
-
-            Print($"EMA initialized with period {Period}");
+            Print($"EMA multiplier set to {_emaMultiplier} for period {Period}");
         }
         
         private void InitializeTimeZone()
@@ -320,72 +317,104 @@ namespace cAlgo.Robots
             
             CheckPerformanceProtection();
         }
-
+        
         #endregion
-
-        #region EMA Calculation
-
-        private void UpdateEmaForIndex(int index)
+        
+        #region EMA Calculation Methods
+        
+        /// <summary>
+        /// Calculates the EMA value at a specific bar index
+        /// Only updates EMA for bars within RTH session
+        /// </summary>
+        private double CalculateEmaAtIndex(int barIndex)
         {
-            var utcTime = Bars.OpenTimes[index];
-            if (IsBarInEmaSession(utcTime))
+            // Check cache first
+            if (_emaCache.ContainsKey(barIndex))
             {
-                double price = GetPrice(index);
-                if (!_emaSeeded)
+                return _emaCache[barIndex];
+            }
+            
+            // Calculate EMA up to the requested index
+            for (int i = 0; i <= barIndex; i++)
+            {
+                if (_emaCache.ContainsKey(i))
                 {
-                    _lastEma = price;
-                    _emaSeeded = true;
+                    continue; // Already calculated
+                }
+                
+                double price = GetPriceAtBar(i);
+                
+                // Only update EMA if this bar is in RTH
+                if (IsRthBar(i))
+                {
+                    if (!_emaSeeded)
+                    {
+                        // Seed EMA with first RTH bar's price
+                        _lastEmaValue = price;
+                        _emaSeeded = true;
+                        Print($"EMA seeded with price {price} at bar {i}");
+                    }
+                    else
+                    {
+                        // Calculate EMA: EMA = (multiplier * (price - lastEMA)) + lastEMA
+                        _lastEmaValue = (_emaMultiplier * (price - _lastEmaValue)) + _lastEmaValue;
+                    }
+                    
+                    _emaCache[i] = _lastEmaValue;
                 }
                 else
                 {
-                    _lastEma = (_emaMultiplier * (price - _lastEma)) + _lastEma;
+                    // For non-RTH bars, use the last calculated EMA value
+                    if (!double.IsNaN(_lastEmaValue))
+                    {
+                        _emaCache[i] = _lastEmaValue;
+                    }
                 }
-                SetEmaValue(index, _lastEma);
             }
-            else
+            
+            return _emaCache.ContainsKey(barIndex) ? _emaCache[barIndex] : double.NaN;
+        }
+        
+        /// <summary>
+        /// Checks if a bar at the given index is within RTH session
+        /// </summary>
+        private bool IsRthBar(int index)
+        {
+            if (index < 0 || index >= Bars.Count) return false;
+            
+            var utcTime = Bars.OpenTimes[index];
+            var etTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _nyZone);
+            var timeOfDay = etTime.TimeOfDay;
+            
+            return timeOfDay >= _rthStart && timeOfDay <= _rthEnd;
+        }
+        
+        /// <summary>
+        /// Gets the price value based on the Source parameter
+        /// </summary>
+        private double GetPriceAtBar(int index)
+        {
+            switch (Source)
             {
-                SetEmaValue(index, double.NaN);
+                case cAlgo.API.PriceType.Open:
+                    return Bars.OpenPrices[index];
+                case cAlgo.API.PriceType.High:
+                    return Bars.HighPrices[index];
+                case cAlgo.API.PriceType.Low:
+                    return Bars.LowPrices[index];
+                case cAlgo.API.PriceType.Close:
+                    return Bars.ClosePrices[index];
+                case cAlgo.API.PriceType.Median:
+                    return (Bars.HighPrices[index] + Bars.LowPrices[index]) / 2;
+                case cAlgo.API.PriceType.Typical:
+                    return (Bars.HighPrices[index] + Bars.LowPrices[index] + Bars.ClosePrices[index]) / 3;
+                case cAlgo.API.PriceType.Weighted:
+                    return (Bars.HighPrices[index] + Bars.LowPrices[index] + 2 * Bars.ClosePrices[index]) / 4;
+                default:
+                    return Bars.ClosePrices[index];
             }
         }
-
-        private void SetEmaValue(int index, double value)
-        {
-            if (index < _emaSeries.Count)
-                _emaSeries[index] = value;
-            else
-            {
-                while (_emaSeries.Count < index)
-                    _emaSeries.Add(double.NaN);
-                _emaSeries.Add(value);
-            }
-        }
-
-        private double GetEmaValue(int index)
-        {
-            return index < _emaSeries.Count ? _emaSeries[index] : double.NaN;
-        }
-
-        private bool IsBarInEmaSession(DateTime utcTime)
-        {
-            var nyTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _nyZone).TimeOfDay;
-            return nyTime >= _emaSessionStart && nyTime <= _emaSessionEnd;
-        }
-
-        private double GetPrice(int index)
-        {
-            return Source switch
-            {
-                cAlgo.API.PriceType.Open => Bars.OpenPrices[index],
-                cAlgo.API.PriceType.High => Bars.HighPrices[index],
-                cAlgo.API.PriceType.Low => Bars.LowPrices[index],
-                cAlgo.API.PriceType.Close => Bars.ClosePrices[index],
-                cAlgo.API.PriceType.Median => (Bars.HighPrices[index] + Bars.LowPrices[index]) / 2.0,
-                cAlgo.API.PriceType.Typical => (Bars.HighPrices[index] + Bars.LowPrices[index] + Bars.ClosePrices[index]) / 3.0,
-                cAlgo.API.PriceType.Weighted => (Bars.HighPrices[index] + Bars.LowPrices[index] + 2 * Bars.ClosePrices[index]) / 4.0,
-                _ => Bars.ClosePrices[index]
-            };
-        }
-
+        
         #endregion
         
         #region Event Handlers
@@ -586,9 +615,7 @@ namespace cAlgo.Robots
             
             int completedBarIndex = Bars.Count - 2;
             if (completedBarIndex < 0) return;
-
-            UpdateEmaForIndex(completedBarIndex);
-
+            
             var barUtcTime = Bars.OpenTimes[completedBarIndex];
             var barEtTime = TimeZoneInfo.ConvertTimeFromUtc(barUtcTime, _nyZone);
             var etTimeOfDay = barEtTime.TimeOfDay;
@@ -654,7 +681,8 @@ namespace cAlgo.Robots
         
         private void IdentifyGap(int barIndex)
         {
-            double emaValue = GetEmaValue(barIndex);
+            // Calculate EMA value at this bar index (replaces _rthEma.RthEmaSeries[barIndex])
+            double emaValue = CalculateEmaAtIndex(barIndex);
             
             Print($"Identifying gap - EMA value: {emaValue}, Bar High: {Bars.HighPrices[barIndex]}, Bar Low: {Bars.LowPrices[barIndex]}");
             
@@ -1363,6 +1391,11 @@ namespace cAlgo.Robots
             _dailyTradeRecords.Clear();
             _pendingPatternOrders.Clear();
             _patternOrdersByLabel.Clear();
+            
+            // Reset EMA calculation for new day
+            _emaSeeded = false;
+            _lastEmaValue = double.NaN;
+            _emaCache.Clear();
             
             Print($"Reset complete - Previous: {previousBars} bars, {previousPatterns} patterns, {previousTrades} trades");
         }
