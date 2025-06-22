@@ -1,9 +1,11 @@
-# Simple Website
+# Buddy Style Web Demo
 
-This repository contains a basic example of a static website. It includes:
+This project is a small static website inspired by Buddy.ai. It includes a hero section, feature highlights, and a simple contact form.
 
-- `index.html` – the main page
-- `styles.css` – simple styling
-- `script.js` – a small script for the contact form
+## Files
+
+- `index.html` – main page with features, how it works, and contact sections.
+- `styles.css` – styling for layout and interactive elements.
+- `script.js` – handles form submission and smooth scrolling.
 
 Open `index.html` in your browser to view the site.
