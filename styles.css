@@ -27,8 +27,46 @@ header nav a {
     text-decoration: none;
 }
 
+.hero {
+    background: #f5f5f5;
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.hero .cta {
+    display: inline-block;
+    margin-top: 1rem;
+    background: #ff695e;
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    text-decoration: none;
+    border-radius: 4px;
+}
+
 section {
     padding: 2rem;
+}
+
+.features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+}
+
+.feature {
+    flex: 1 1 250px;
+    background: #fafafa;
+    padding: 1rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.steps {
+    list-style: decimal inside;
+    max-width: 600px;
+    margin: auto;
+    line-height: 1.8;
 }
 
 form {
