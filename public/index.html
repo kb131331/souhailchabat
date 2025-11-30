@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkinRoutine AI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <h1>SkinRoutine AI</h1>
+      <p class="subtitle">Answer a few quick questions and get a tailored AM/PM skincare routine.</p>
+    </header>
+
+    <section class="card">
+      <form id="profile-form">
+        <div class="field">
+          <label for="skinType">Skin type</label>
+          <select id="skinType" name="skinType" required>
+            <option value="">Select...</option>
+            <option>Very oily</option>
+            <option>Oily</option>
+            <option>Combination</option>
+            <option>Normal</option>
+            <option>Dry</option>
+            <option>Very dry</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Main concerns</label>
+          <div class="checkbox-group" data-name="concerns">
+            <label><input type="checkbox" value="acne" /> Acne</label>
+            <label><input type="checkbox" value="clogged pores" /> Clogged pores</label>
+            <label><input type="checkbox" value="redness" /> Redness</label>
+            <label><input type="checkbox" value="sensitivity" /> Sensitivity</label>
+            <label><input type="checkbox" value="aging" /> Aging</label>
+            <label><input type="checkbox" value="dark spots" /> Dark spots</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Sensitivities</label>
+          <div class="checkbox-group" data-name="sensitivities">
+            <label><input type="checkbox" value="fragrance" /> Fragrance</label>
+            <label><input type="checkbox" value="essential oils" /> Essential oils</label>
+            <label><input type="checkbox" value="alcohol" /> Alcohol</label>
+            <label><input type="checkbox" value="eye area stinging" /> Eye area stinging</label>
+            <label><input type="checkbox" value="none" /> None</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Tolerated actives</label>
+          <div class="checkbox-group" data-name="toleratedActives">
+            <label><input type="checkbox" value="salicylic acid" /> Salicylic acid</label>
+            <label><input type="checkbox" value="benzoyl peroxide" /> Benzoyl peroxide</label>
+            <label><input type="checkbox" value="retinoid" /> Retinoid</label>
+            <label><input type="checkbox" value="niacinamide" /> Niacinamide</label>
+            <label><input type="checkbox" value="vitamin C" /> Vitamin C</label>
+            <label><input type="checkbox" value="not sure" /> Not sure</label>
+          </div>
+        </div>
+
+        <div class="field inline">
+          <div>
+            <label for="maxSteps">Max steps</label>
+            <select id="maxSteps" name="maxSteps">
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+          <div>
+            <label for="budget">Budget</label>
+            <select id="budget" name="budget">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div>
+            <label for="country">Country</label>
+            <input type="text" id="country" name="country" placeholder="e.g. Morocco" />
+          </div>
+        </div>
+
+        <button type="submit" class="primary">Generate my routine</button>
+      </form>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="error" class="error" role="alert"></div>
+    </section>
+
+    <section id="results" class="results hidden">
+      <h2>Your routine</h2>
+      <div class="routine-columns">
+        <div>
+          <h3>Morning (AM)</h3>
+          <div id="am-steps" class="steps"></div>
+        </div>
+        <div>
+          <h3>Evening (PM)</h3>
+          <div id="pm-steps" class="steps"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
